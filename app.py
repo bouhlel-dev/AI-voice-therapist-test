@@ -10,6 +10,10 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
+import edge_tts
+import uuid
+from datetime import datetime
+
 
 # Optional: Only import pydub if available
 try:
@@ -82,7 +86,7 @@ async def chat_audio(file: UploadFile = File(...)):
         if not ai_response:
             return JSONResponse(content={"error": "Failed to get AI response"}, status_code=500)
 
-        audio_output_path = generate_speech(ai_response)
+        audio_output_path = await generate_speech(ai_response)
 
         return {
             "message": user_input,
@@ -106,7 +110,7 @@ async def chat_text(input_text: str = Form(...)):
         if not ai_response:
             return JSONResponse(content={"error": "Failed to get AI response"}, status_code=500)
 
-        audio_output_path = generate_speech(ai_response)
+        audio_output_path = await generate_speech(ai_response)
 
         return {
             "message": input_text,
@@ -139,7 +143,7 @@ def get_gemini_response(user_input: str) -> str:
     """Calls Gemini API and returns response text."""
     try:
         payload = {
-            "contents": [{"parts": [{"text": f"Hey, be a chill Gen Z therapist and keep it short and optimize it for google cloud tts : {user_input}"}]}],
+            "contents": [{"parts": [{"text": f"Hey, be a chill therapist and keep it short and optimize the response for tts so it sound clear and natural and dont use emojis : {user_input}"}]}],
             "generationConfig": {"maxOutputTokens": 150}
         }
         headers = {"Content-Type": "application/json"}
@@ -173,48 +177,39 @@ def get_gemini_response(user_input: str) -> str:
         return "Oops, something went wrong on my end."
 
 
-def generate_speech(text: str) -> str:
-    """Converts text to speech using Edge TTS for high-quality, free voice."""
-    # Generate unique filename using timestamp and UUID
+
+async def generate_speech(text: str) -> str:
+    """Converts text to speech using Edge TTS asynchronously."""
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid.uuid4())[:8]
     output_audio = f"response_{timestamp}_{unique_id}.mp3"
-    
+
     try:
-        import edge_tts
-        import asyncio
-        
-        # Use Edge TTS with a natural-sounding voice
-        # Options: en-US-AriaNeural (female), en-US-GuyNeural (male), en-US-JennyNeural (female)
-        voice = "en-US-AriaNeural"  # Very natural female voice
-        
-        async def generate_audio():
-            communicate = edge_tts.Communicate(
+        #options en-US-GuyNeural, en-US-JennyNeural, en-US-AriaNeural,
+        #en-GB-RyanNeural, en-GB-SoniaNeural, en-AU-NatashaNeural, en-AU-WilliamNeural
+        voice = "en-US-GuyNeural"
+
+        communicate = edge_tts.Communicate(
             text, 
             voice,
-            rate="+10%",  # Speed: -50% to +100%
-            pitch="+0Hz"  # Pitch: -50Hz to +50Hz
-            )
-            
-            await communicate.save(output_audio)
-        
-        # Run the async function
-        asyncio.run(generate_audio())
-        
+            rate="+10%",
+            pitch="+0Hz"
+        )
+
+        await communicate.save(output_audio)
         print(f"✅ Generated natural audio with Edge TTS: {output_audio}")
+
         return output_audio
-            
+
     except Exception as e:
-        print(f"🔥 Error with Edge TTS: {e}")
-        # Fallback to gTTS
-        try:
-            tts = gTTS(text=text, lang="en", slow=False)
-            tts.save(output_audio)
-            print(f"✅ Generated audio (gTTS fallback): {output_audio}")
-            return output_audio
-        except Exception as e2:
-            print(f"🔥 Fallback also failed: {e2}")
-            raise
+        print(f"🔥 Edge TTS failed, falling back to gTTS: {e}")
+        # Fallback
+        from gtts import gTTS
+        tts = gTTS(text=text, lang="en", slow=False)
+        tts.save(output_audio)
+        return output_audio
+
 
 def generate_speech_google(text: str) -> str:
     """Uses Google Cloud TTS to generate custom voice speech."""
